@@ -348,8 +348,8 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
             ok_json = ok.json()
             if ok_json['response']['params']['result'] != 'OK':
                 return (False, '{"status":-23,"error":"vksteam api result is not OK"}')
-            steamid = ok_json['response']['params']['steamid']
-            ownersteamid = ok_json['response']['params']['ownersteamid']
+            steamid = str(ok_json['response']['params']['steamid'])
+            ownersteamid = str(ok_json['response']['params']['ownersteamid'])
             if steamid != user_id and ownersteamid != user_id:
                 return (False, '{"status":-24,"error":"vksteam api user id mismatch"}')
             vksteam_ticket_cache[ticket] = user_id
