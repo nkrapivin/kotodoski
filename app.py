@@ -463,8 +463,12 @@ def get_admin_action():
         return 'unknown admin api action o_O?'
 
 
-if __name__ == '__main__':
+def run_app():
     app.logger.info('!!! Starting a Flask application for local debugging...')
     app.logger.info('Kotodoski debug')
     app.run(port=8080, debug=True)
+
+
+if __name__ == '__main__':
+    run_app()
 
