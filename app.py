@@ -342,7 +342,7 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
         url = f'https://api.vkplay.ru/steam/ISteamUserAuth/AuthenticateUserTicket/v1/?key={CONFIG_VKSTEAM_KEY}&ticket={ticket}&appid={CONFIG_VKSTEAM_APP_ID}'
 
         try:
-            ok = requests.get(url, {'User-Agent': CONFIG_SERVER_USER_AGENT})
+            ok = requests.get(url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
             if ok.status_code >= 400:
                 return (False, '{"status":-22,"error":"vksteam api request forbidden"}')
             ok_json = ok.json()
