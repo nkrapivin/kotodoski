@@ -17,7 +17,7 @@ import json
 
 app = Flask(__name__)
 lock = Lock()
-data: dict|None = None
+data: dict = None
 data_serialized = ''
 
 def get_current_datetime() -> float:
@@ -457,7 +457,7 @@ def get_leaderboard():
     return Response(response=rv[1], status=httpstatus, content_type='application/json; charset=utf-8')
 
 
-cloud_save_storage: dict|None = None
+cloud_save_storage: dict = None
 cloud_save_lock = Lock()
 cloud_save_serialized = ''
 
