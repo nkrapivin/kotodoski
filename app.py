@@ -199,6 +199,7 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
         # такого надеюсь не будет
         app.logger.error('!!! FATAL ERROR in leaderboard data for ', leaderboard_id, ' please inspect!')
         return (False, json.dumps({'status':-6,'error':'unable to find new entry index after sorting, WTF?!'}))
+    backup_data()
     # йиппи!!!!1
     return (True, json.dumps({'status':1,'error':'','new_entry_index':our_index}))
 
@@ -381,11 +382,16 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
             return (False, json.dumps({'status':-25,'error':'vksteam api request failed'}))
 
 
-def do_user_id_validation() -> tuple[bool, Response]:
-    user_id = request.form.get('user_id', type=str)
+def do_user_id_validation(is_post: str) -> tuple[bool, Response]:
+    if is_post:
+        rargs = request.form
+    else:
+        rargs = request.args
+    
+    user_id = rargs.get('user_id', type=str)
     if CONFIG_USE_GAS:
-        gas_uid = request.form.get('gas_uid', type=str)
-        gas_hash = request.form.get('gas_hash', type=str)
+        gas_uid = rargs.get('gas_uid', type=str)
+        gas_hash = rargs.get('gas_hash', type=str)
         gas_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
         gas_result = do_gas_request(gas_uid, gas_hash, gas_ip)
         if not gas_result[0]:
@@ -394,7 +400,7 @@ def do_user_id_validation() -> tuple[bool, Response]:
             # разрешить не указывать user_id если он уже известен из GAS
             user_id = gas_uid
     elif CONFIG_USE_VKSTEAM:
-        vksteam_ticket = request.form.get('vksteam_ticket', type=str)
+        vksteam_ticket = rargs.get('vksteam_ticket', type=str)
         vksteam_result = do_vksteam_verify_ticket(vksteam_ticket, user_id)
         if not vksteam_result[0]:
             return (False, Response(response=vksteam_result[1], status=401, content_type='application/json; charset=utf-8'))
@@ -408,7 +414,7 @@ def post_leaderboard():
     score = request.form.get('score', type=int)
     user_name = request.form.get('user_name', type=str)
 
-    user_id_auth = do_user_id_validation()
+    user_id_auth = do_user_id_validation(True)
     if not user_id_auth[0]:
         return user_id_auth[1]
     user_id = user_id_auth[1]
@@ -436,7 +442,7 @@ def get_leaderboard():
     index_start = request.args.get('index_start', type=int)
     amount = request.args.get('amount', type=int)
 
-    user_id_auth = do_user_id_validation()
+    user_id_auth = do_user_id_validation(False)
     if not user_id_auth[0]:
         return user_id_auth[1]
     user_id = user_id_auth[1]
@@ -508,7 +514,7 @@ def pre_cloud_save_request():
 def post_cloud_save():
     data_string = request.form.get('data', type=str)
 
-    user_id_auth = do_user_id_validation()
+    user_id_auth = do_user_id_validation(True)
     if not user_id_auth[0]:
         return user_id_auth[1]
     user_id = user_id_auth[1]
@@ -534,7 +540,7 @@ def post_cloud_save():
 @app.route('/v1/api/cloud_get', methods=['GET'])
 def get_cloud_save():
 
-    user_id_auth = do_user_id_validation()
+    user_id_auth = do_user_id_validation(False)
     if not user_id_auth[0]:
         return user_id_auth[1]
     user_id = user_id_auth[1]
