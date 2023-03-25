@@ -49,4 +49,6 @@ CONFIG_LEADERBOARD_INFO = {
         'max_entries': 1000
     }
 }
+# str, путь куда писать резервные копии данных
+CONFIG_BACKUP_PATH = '/var/www/_backups'
 # -- КОНЕЦ КОНФИГУРАЦИИ -- #
