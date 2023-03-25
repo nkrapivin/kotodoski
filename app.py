@@ -381,7 +381,7 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
             return (False, json.dumps({'status':-25,'error':'vksteam api request failed'}))
 
 
-def do_user_id_validation() -> tuple[bool, Response|str]:
+def do_user_id_validation() -> tuple[bool, Response]:
     user_id = request.form.get('user_id', type=str)
     if CONFIG_USE_GAS:
         gas_uid = request.form.get('gas_uid', type=str)
