@@ -583,6 +583,8 @@ def get_admin_action():
         return 'cloud save reset successful'
     elif req == 'get_cloud_save':
         return cloud_save_serialized
+    elif req == 'get_leaderboards':
+        return data_serialized
     else:
         return 'unknown admin api action o_O?'
 
