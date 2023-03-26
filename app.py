@@ -15,33 +15,41 @@ import requests
 from threading import Lock
 import json
 
+
 app = Flask(__name__)
 lock = Lock()
 data: dict = None
 data_serialized = ''
 
+
 def get_current_datetime() -> float:
     return datetime.now(timezone.utc).timestamp()
-
-def get_current_date() -> float:
-    # Нам пофиг на *время* т.к. сервер мог быть запущен
-    # хоть в полдень, хоть в полночи, и нам нужно как-то нормально оперировать.
-    # По этому здесь время игнорируется, и уже нужные часы/минуты/недели добавляются
-    dtnow = datetime.now(timezone.utc)
-    return datetime(dtnow.year, dtnow.month, dtnow.day).timestamp()
 
 
 def get_next_reset_date(reset_type: str) -> float:
     dtnow = datetime.now(timezone.utc)
 
     if not reset_type:
+        # не сбрасывать вообще
         return 0
     elif reset_type == 'day':
-        return (dtnow + timedelta(days=1)).timestamp()
+        # следующий день, без учёта часов, минут или секунд
+        return (datetime(dtnow.year, dtnow.month, dtnow.day, tzinfo=dtnow.tzinfo, fold=dtnow.fold) + timedelta(days=1)).timestamp()
     elif reset_type == 'week':
-        return (dtnow + timedelta(weeks=1)).timestamp()
+        # следующая неделя относительно текущей, без учёта дней, часов, минут или секунд
+        # недели очень странный предмет, здесь нужно из текущей даты
+        # вычесть сколько дней в текущей неделе, и добавить +1 неделю к этой дате.
+        # то есть мы откатываем текущую дату в начало недели, и добавляем неделю.
+        return ((dtnow - timedelta(days=dtnow.weekday())) + timedelta(weeks=1)).timestamp()
     elif reset_type == 'hour':
-        return (dtnow + timedelta(hours=1)).timestamp()
+        # следующий час, без учёта минут или секунд
+        return (datetime(dtnow.year, dtnow.month, dtnow.day, dtnow.hour, tzinfo=dtnow.tzinfo, fold=dtnow.fold) + timedelta(hours=1)).timestamp()
+    elif reset_type == 'minute':
+        # следующая минута, без учёта секунд
+        # только для тестирования сброса, не использовать в проде!!
+        return (datetime(dtnow.year, dtnow.month, dtnow.day, dtnow.hour, dtnow.minute, tzinfo=dtnow.tzinfo, fold=dtnow.fold) + timedelta(minutes=1)).timestamp()
+    # ?????
+    app.logger.error('!!! Unknown board reset date type ' + reset_type)
     return 0
 
 
@@ -101,7 +109,7 @@ def init_if_not_already():
             'max_entries': value['max_entries'],
             'array': []
         }
-        app.logger.info('Adding leaderboard with id of ', key, ' to the party...')
+        app.logger.info('Adding leaderboard with id of ' + key + ' to the party...')
     
     data_serialized = json.dumps(data)
     app.logger.info('Initialized the leaderboard data')
@@ -110,7 +118,7 @@ def init_if_not_already():
 def reset_leaderboards_if_necessary():
     global data
 
-    dtnow = get_current_date()
+    dtnow = get_current_datetime()
 
     for key in data:
         dtreset = data[key]['reset_date']
@@ -118,10 +126,10 @@ def reset_leaderboards_if_necessary():
             continue
 
         if dtnow >= dtreset:
-            app.logger.info('!!! Resetting leaderboard with id of ', key)
+            app.logger.info('!!! Resetting leaderboard with id of ' + key)
             data[key]['array'].clear()
             data[key]['reset_date'] = get_next_reset_date(data[key]['reset_every'])
-            app.logger.info('!!! Resetted ', key)
+            app.logger.info('!!! Resetted ' + key)
 
 
 def pre_request():
@@ -249,7 +257,11 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
             break
 
         entry = dict(board_array[idx])
+        # докинуть индекс из цикла для подсчёта места
         entry['index'] = idx
+        # пусть будет пустая строка вместо null-а если нет метаданных
+        if (not ('metadata' in entry)) or (entry['metadata'] is None):
+            entry['metadata'] = ''
         tmplist.append(entry)
 
     return (True, json.dumps({'status':1,'error':'','entries':tmplist,'amount':len(tmplist),'total':entries}))
