@@ -544,7 +544,7 @@ def post_cloud_save():
                 dtnow = get_current_datetime()
                 if not (user_id in cloud_save_storage):
                     cloud_save_storage[user_id] = {}
-                cloud_save_storage[user_id]['slot_id'] = { 'data': data_string, 'timestamp': dtnow }
+                cloud_save_storage[user_id][slot_id] = { 'data': data_string, 'timestamp': dtnow }
             rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
             backup_cloud_save()
     
