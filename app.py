@@ -254,6 +254,10 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
     return (True, json.dumps({'status':1,'error':'','entries':tmplist,'amount':len(tmplist),'total':entries}))
 
 
+def get_client_ip():
+    return request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+
+
 gas_session_cache = {}
 gas_lock = Lock()
 
@@ -392,7 +396,7 @@ def do_user_id_validation(is_post: str) -> tuple[bool, Response]:
     if CONFIG_USE_GAS:
         gas_uid = rargs.get('gas_uid', type=str)
         gas_hash = rargs.get('gas_hash', type=str)
-        gas_ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+        gas_ip = get_client_ip()
         gas_result = do_gas_request(gas_uid, gas_hash, gas_ip)
         if not gas_result[0]:
             return (False, Response(response=gas_result[1], status=401, content_type='application/json; charset=utf-8'))
@@ -513,6 +517,7 @@ def pre_cloud_save_request():
 @app.route('/v1/api/cloud_post', methods=['POST'])
 def post_cloud_save():
     data_string = request.form.get('data', type=str)
+    slot_id = request.args.get('slot_id', type=str)
 
     user_id_auth = do_user_id_validation(True)
     if not user_id_auth[0]:
@@ -524,21 +529,25 @@ def post_cloud_save():
     with cloud_save_lock:
         pre_cloud_save_request()
 
-        if not data_string:
+        if not slot_id:
             dtnow = 0
-            cloud_save_storage.pop(user_id)
+            rv = json.dumps({'status':-1,'error':'param slot_id is invalid','timestamp':dtnow})
         else:
-            dtnow = get_current_datetime()
-            cloud_save_storage[user_id] = { 'data': data_string, 'timestamp': dtnow }
-        
-        backup_cloud_save()
-        rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
+            if not data_string:
+                dtnow = 0
+                cloud_save_storage.pop(user_id)
+            else:
+                dtnow = get_current_datetime()
+                cloud_save_storage[user_id]['slot_id'] = { 'data': data_string, 'timestamp': dtnow }
+            rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
+            backup_cloud_save()
     
     return Response(response=rv, status=httpstatus, content_type='application/json; charset=utf-8')
 
 
 @app.route('/v1/api/cloud_get', methods=['GET'])
 def get_cloud_save():
+    slot_id = request.args.get('slot_id', type=str)
 
     user_id_auth = do_user_id_validation(False)
     if not user_id_auth[0]:
@@ -550,12 +559,12 @@ def get_cloud_save():
     with cloud_save_lock:
         pre_cloud_save_request()
 
-        if not (user_id in cloud_save_storage):
+        if (not (user_id in cloud_save_storage)) or (not (slot_id in cloud_save_storage[user_id])):
             httpstatus = 404
-            rv = json.dumps({'status':0,'error':'no data is present for given user_id','timestamp':0,'data':''})
+            rv = json.dumps({'status':0,'error':'no data is present for given user_id or slot_id','timestamp':0,'data':''})
         else:
-            rv = json.dumps({'status':1,'error':'','timestamp': cloud_save_storage[user_id]['timestamp'], \
-                             'data': cloud_save_storage[user_id]['data']})
+            rv = json.dumps({'status':1,'error':'','timestamp': cloud_save_storage[user_id][slot_id]['timestamp'], \
+                             'data': cloud_save_storage[user_id][slot_id]['data']})
     
     return Response(response=rv, status=httpstatus, content_type='application/json; charset=utf-8')
 
@@ -564,7 +573,7 @@ def get_cloud_save():
 def get_admin_action():
     global data
 
-    ip = request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
+    ip = get_client_ip()
     app.logger.info('admin request from ip address ' + ip)
 
     if not CONFIG_ADMIN_SECRET:
@@ -593,6 +602,13 @@ def get_admin_action():
         return data_serialized
     else:
         return 'unknown admin api action o_O?'
+
+
+@app.route('/v1/api/server_time', methods=['GET'])
+def get_server_time():
+    ip = get_client_ip()
+    rv = json.dumps({'status':1,'error':'','timestamp':get_current_datetime(),'ip':ip})
+    return Response(response=rv, status=200, content_type='application/json; charset=utf-8')
 
 
 def run_app():

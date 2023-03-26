@@ -22,6 +22,10 @@
 - [Сохранить данные](#/v1/api/cloud_post)
 - [Получить данные](#/v1/api/cloud_get)
 
+**Служебная информация:**
+
+- [Серверное время и ваш IP](#/v1/api/server_time)
+
 **Администрирование:**
 
 - [Админский API метод](#/v1/api/admin_action)
@@ -363,6 +367,7 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
 |--------------|-------------|-------------------|
 |data|str\|None|Строка данных которую нужно записать. *Если параметр не дан, сохранение удаляется!*|
 |user_id|str|Идентификатор пользователя. Для GAS опционален, для VKSteam обязателен.|
+|slot_id|str|Идентификатор слота облачных сохранений|
 |gas_uid|str|**(ТОЛЬКО ДЛЯ GAS)** GAS UID из параметров запуска|
 |gas_hash|str|**(ТОЛЬКО ДЛЯ GAS)** GAS OTP Hash из параметров запуска|
 |vksteam_ticket|str|**(ТОЛЬКО ДЛЯ VKSTEAM)** Тикет авторизации как hex-строка без префикса `0x` с чётным кол-вом символов. **Параметр `user_id` становится ОБЯЗАТЕЛЕН!**|
@@ -381,13 +386,13 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
 
 `https://wallyboards.duckdns.org/v1/api/cloud_set`
 
-Тело POST: `user_id=612345&vksteam_ticket=abcdef&data=0YXQvtGH0YMg0L7QsdC90LjQvNCw0YjQtdC6`
+Тело POST: `user_id=612345&vksteam_ticket=abcdef&slot=wally&data=0YXQvtGH0YMg0L7QsdC90LjQvNCw0YjQtdC6`
 
-Запишет base64-строку `0YXQvtGH0YMg0L7QsdC90LjQvNCw0YjQtdC6` в облачные сохранения пользователя с идентификатором `612345` и авторизацией через VKSteam.
+Запишет base64-строку `0YXQvtGH0YMg0L7QsdC90LjQvNCw0YjQtdC6` в облачные сохранения пользователя в слот `wally` с идентификатором `612345` и авторизацией через VKSteam.
 
-Тело POST: `user_id=612345&vksteam_ticket=abcdef`
+Тело POST: `user_id=612345&vksteam_ticket=abcdef&slot=wally`
 
-Удалит облачное сохранение для пользователя с идентификатором `612345`.
+Удалит облачное сохранение в слоте `wally` для пользователя с идентификатором `612345`.
 
 **Пример ответа (при сохранении):**
 
@@ -420,6 +425,7 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
 |Имя параметра |Тип параметра|Описание параметра |
 |--------------|-------------|-------------------|
 |user_id|str|Идентификатор пользователя. Для GAS опционален, для VKSteam обязателен.|
+|slot_id|str|Идентификатор слота сохранения|
 |gas_uid|str|**(ТОЛЬКО ДЛЯ GAS)** GAS UID из параметров запуска|
 |gas_hash|str|**(ТОЛЬКО ДЛЯ GAS)** GAS OTP Hash из параметров запуска|
 |vksteam_ticket|str|**(ТОЛЬКО ДЛЯ VKSTEAM)** Тикет авторизации как hex-строка без префикса `0x` с чётным кол-вом символов. **Параметр `user_id` становится ОБЯЗАТЕЛЕН!**|
@@ -437,16 +443,16 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
 
 **Пример запроса:**
 
-`https://wallyboards.duckdns.org/v1/api/cloud_get?user_id=612345&vksteam_ticket=abcdef`
+`https://wallyboards.duckdns.org/v1/api/cloud_get?user_id=612345&vksteam_ticket=abcdef&slot_id=wally`
 
-Получит строку из облачных сохранений для пользователя с идентификатором `612345` и авторизацией через VKSteam.
+Получит строку из слота `wally` облачных сохранений для пользователя с идентификатором `612345` и авторизацией через VKSteam.
 
 **Пример ответа (при отсутствии данных):**
 
 ```json
 {
     "status": 0,
-    "error": "no data is present for given user_id",
+    "error": "no data is present for given user_id or slot_id",
     "timestamp": 0,
     "data": ""
 }
@@ -462,5 +468,50 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
     "data": "0J/QsNGB0YXQsNC70L7QuiDQvdC1INCx0YPQtNC10YIu"
 }
 ```
+
+## /v1/api/server_time
+
+Получает текущее время на сервере и возвращает ваш реальный IP-адрес.
+
+Пожалуйста, учтите несколько вещей:
+
+- Время всегда возвращается в UTC, в формате UNIX Epoch.
+- Время может отставать на несколько секунд в зависимости от пинга, прокси и других внешних факторов.
+- IP-адрес клиента может быть неверным в зависимости от конфигурации прокси вашего сервера, см. функцию `get_client_ip` чтобы исправить это.
+
+**HTTP метод:** `GET`
+
+**Параметры:**
+
+Нет.
+
+**Возвращает:** `JSON` объект в кодировке `UTF-8`, см. ниже.
+
+**Описание возвращаемого объекта:**
+
+|Имя|Тип|Описание|
+|---|---|--------|
+|status|int|Всегда `1`|
+|error|str|Всегда пустая|
+|timestamp|float|Временная метка в формате UNIX UTC|
+|ip|str|IP-адрес сущности сделавшей запрос|
+
+**Пример запроса:**
+
+`https://wallyboards.duckdns.org/v1/api/server_time`
+
+Получит текущее серверное время.
+
+**Пример ответа:**
+
+```json
+{
+    "status": 1,
+    "error": "",
+    "timestamp": 0,
+    "ip": ""
+}
+```
+
 
 
