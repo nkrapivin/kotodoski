@@ -382,6 +382,13 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
 |error|str|В случае успеха всегда пустая, иначе сообщение об ошибке|
 |timestamp|float|Временная метка в формате UNIX UTC, `0` если данные были удалены|
 
+**Коды ошибок `status`:**
+
+|Код в `status`|Описание|
+|------------|--------|
+|-1|Неверный параметр `slot_id`, пустой или не дан|
+| 1|Успех, см. ниже|
+
 **Пример запроса:**
 
 `https://wallyboards.duckdns.org/v1/api/cloud_set`

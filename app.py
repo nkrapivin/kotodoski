@@ -517,7 +517,7 @@ def pre_cloud_save_request():
 @app.route('/v1/api/cloud_post', methods=['POST'])
 def post_cloud_save():
     data_string = request.form.get('data', type=str)
-    slot_id = request.args.get('slot_id', type=str)
+    slot_id = request.form.get('slot_id', type=str)
 
     user_id_auth = do_user_id_validation(True)
     if not user_id_auth[0]:
