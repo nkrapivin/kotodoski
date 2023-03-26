@@ -56,55 +56,67 @@ def get_next_reset_date(reset_type: str) -> float:
     return 0
 
 
-def init_if_not_already():
+def init_if_not_already(lbid: str):
     global data
     
     do_commit = False
-    data = db_leaderboards.get('data')
+    data = db_leaderboards.get(lbid)
 
     if data is None:
-        for key, value in CONFIG_LEADERBOARD_INFO.items():
-            data[key] = {
-                'reset_every': value['reset_every'],
-                'reset_date': get_next_reset_date(value['reset_every']),
-                'sort_in_reverse': value['reverse_sort'],
-                'allow_overwrite': value['allow_overwrite'],
-                'max_entries': value['max_entries'],
-                'array': []
-            }
-            app.logger.info('Adding leaderboard with id of ' + key + ' to the party...')
-            do_commit = True
+        if not (lbid in CONFIG_LEADERBOARD_INFO):
+            # такой нет в конфиге? ух ты...
+            return False
+        
+        value = CONFIG_LEADERBOARD_INFO[lbid]
+        # deta base не может хранить None как значение
+        if value['reset_every'] is None:
+            value['reset_every'] = ''
+        if value['max_entries'] is None:
+            value['max_entries'] = 0
+        data = {
+            'reset_every': value['reset_every'],
+            'reset_date': get_next_reset_date(value['reset_every']),
+            'sort_in_reverse': value['reverse_sort'],
+            'allow_overwrite': value['allow_overwrite'],
+            'max_entries': value['max_entries'],
+            'array': []
+        }
+        do_commit = True
     
     if do_commit:
-        db_leaderboards.insert(data, 'data')
+        app.logger.info('Initialized the leaderboard data for ' + lbid)
+        db_leaderboards.put(data, lbid)
     
-    app.logger.info('Initialized the leaderboard data')
+    return True
 
 
-def reset_leaderboards_if_necessary():
+def reset_leaderboards_if_necessary(lbid: str):
     dtnow = get_current_datetime()
 
     do_reset = False
-    for key in data:
-        dtreset = data[key]['reset_date']
-        if not dtreset:
-            continue
 
-        if dtnow >= dtreset:
-            app.logger.info('!!! Resetting leaderboard with id of ' + key)
-            data[key]['array'].clear()
-            data[key]['reset_date'] = get_next_reset_date(data[key]['reset_every'])
-            app.logger.info('!!! Resetted ' + key)
-            do_reset = True
+    dtreset = data['reset_date']
+    if not dtreset:
+        # не сбрасываемая досочка
+        return
+
+    if dtnow >= dtreset:
+        app.logger.info('!!! Resetting leaderboard with id of ' + lbid)
+        data['array'].clear()
+        data['reset_date'] = get_next_reset_date(data['reset_every'])
+        app.logger.info('!!! Resetted ' + lbid)
+        do_reset = True
     
     if do_reset:
         app.logger.info('!!! Comitting changes to the db')
-        db_leaderboards.insert(data, 'data')
+        db_leaderboards.put(data, lbid)
 
 
-def pre_request():
-    init_if_not_already()
-    reset_leaderboards_if_necessary()
+def pre_request(lbid: str):
+    if not init_if_not_already(lbid):
+        return False
+    reset_leaderboards_if_necessary(lbid)
+    return True
 
 
 def entry_sort_function(item) -> int:
@@ -112,8 +124,6 @@ def entry_sort_function(item) -> int:
 
 
 def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, metadata: str, score: int) -> tuple[bool, str]:
-    pre_request()
-
     # нет смысла иметь отрицательные или нулевые очки в таблице рекордов...
     if score is None or score <= 0:
         return (False, json.dumps({'status':-1,'error':'param score is invalid'}))
@@ -126,15 +136,15 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
     
     if not leaderboard_id:
         return (False, json.dumps({'status':-4,'error':'param leaderboard_id is invalid'}))
-    
-    if not (leaderboard_id in data):
+
+    if not pre_request(leaderboard_id):
         return (False, json.dumps({'status':-5,'error':'leaderboard with given leaderboard_id does not exist'}))
 
-    board_array: list = data[leaderboard_id]['array']
+    board_array: list = data['array']
     for idx in range(len(board_array)):
         # ищем есть ли мы уже в табличке
         if board_array[idx]['user_id'] == user_id:
-            if data[leaderboard_id]['allow_overwrite']:
+            if data['allow_overwrite']:
                 # если включена перезапись, то убираем старую запись
                 board_array.pop(idx)
                 break
@@ -143,7 +153,7 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
                 return (False, json.dumps({'status':0,'error':'an entry for given user_id already exists'}))
 
     # добавляем запись о пользователе в конец таблицы
-    metadatastr = None
+    metadatastr = ''
     if metadata is not None:
         metadatastr = str(metadata)
     board_array.append({
@@ -157,10 +167,10 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
     board_array.sort(
         key = entry_sort_function,
         # :) потому что доски почёта обычно сортируются от БкМ
-        reverse = not data[leaderboard_id]['sort_in_reverse']
+        reverse = not data['sort_in_reverse']
     )
     # если назначен max_entries и есть лишние записи, убираем
-    max_entries = data[leaderboard_id]['max_entries']
+    max_entries = data['max_entries']
     if (max_entries is not None) and (max_entries > 0) and (len(board_array) > max_entries):
         how_many = len(board_array) - max_entries
         # обрубаем лишнее, здесь len всегда больше max_entries, и не равно ему.
@@ -176,14 +186,12 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
         # такого надеюсь не будет
         app.logger.error('!!! FATAL ERROR in leaderboard data for ', leaderboard_id, ' please inspect!')
         return (False, json.dumps({'status':-6,'error':'unable to find new entry index after sorting, WTF?!'}))
-    db_leaderboards.insert(data, 'data')
+    db_leaderboards.put(data, leaderboard_id)
     # йиппи!!!!1
     return (True, json.dumps({'status':1,'error':'','new_entry_index':our_index}))
 
 
 def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, amount: int) -> tuple[bool, str]:
-    pre_request()
-
     if not user_id:
         return (False, json.dumps({'status':-1,'error':'param user_id is invalid'}))
 
@@ -195,20 +203,19 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
     
     # index_start == -1 значит вывести относительно нашего пользователя
     
-    if not (leaderboard_id in data):
-        return (False, json.dumps({'status':-4,'error':'leaderboard with given leaderboard_id does not exist'}))
-    
-    # amount <= 0 значит вывести до конца списка, если возможно.
     if amount < 0:
         return (False, json.dumps({'status':-5,'error':'param amount is invalid'}))
 
-    board_array: list = data[leaderboard_id]['array']
+    if not pre_request(leaderboard_id):
+        return (False, json.dumps({'status':-4,'error':'leaderboard with given leaderboard_id does not exist'}))
+
+    board_array: list = data['array']
     entries = len(board_array)
     
     # index_start == -1 значит искать относительно нас
     if index_start == -1:
         # собственно пытаемся найти "нас"
-        for idx in range(len(board_array)):
+        for idx in range(entries):
             if board_array[idx]['user_id'] == user_id:
                 index_start = idx
                 break
@@ -218,6 +225,7 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
         return (False, json.dumps({'status':0,'error':'index_start is -1 but player with specified user_id is not present'}))
 
     if amount == 0:
+        # amount <= 0 значит вывести до конца списка, если возможно.
         amount = entries - index_start
     
     tmplist = []
@@ -228,9 +236,6 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
         entry = dict(board_array[idx])
         # докинуть индекс из цикла для подсчёта места
         entry['index'] = idx
-        # пусть будет пустая строка вместо null-а если нет метаданных
-        if (not ('metadata' in entry)) or (entry['metadata'] is None):
-            entry['metadata'] = ''
         tmplist.append(entry)
 
     return (True, json.dumps({'status':1,'error':'','entries':tmplist,'amount':len(tmplist),'total':entries}))
@@ -313,7 +318,7 @@ def do_gas_request(gas_uid: str, gas_hash: str, gas_ip: str) -> tuple[bool, str]
             return (False, json.dumps({'status':-17,'error':'gas api status failed'}))
         
         # TODO: пихать что-то полезнее чем 'ok'?
-        gas_session_cache.insert(ok_json_status, cache_key, expire_in=86400)
+        gas_session_cache.put(ok_json_status, cache_key, expire_in=86400)
         return (True, cache_key)
     except:
         return (False, json.dumps({'status':-18,'error':'gas api request failed'}))
@@ -350,7 +355,7 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
             # кто-то подделал тикет? ух ты!
             return (False, json.dumps({'status':-24,'error':'vksteam api user id mismatch'}))
         # ticket -> user_id lookup словарик :3
-        vksteam_ticket_cache.insert(user_id, cache_key, expire_in=86400)
+        vksteam_ticket_cache.put(user_id, cache_key, expire_in=86400)
         return (True, user_id)
     except:
         return (False, json.dumps({'status':-25,'error':'vksteam api request failed'}))
@@ -463,7 +468,7 @@ def post_cloud_save():
         else:
             dtnow = get_current_datetime()
             data_to_put = { 'data': data_string, 'timestamp': dtnow }
-            cloud_save_storage.insert(data_to_put, user_id + '_' + slot_id)
+            cloud_save_storage.put(data_to_put, user_id + '_' + slot_id)
         # 0 если сейв был удалён, или временная метка сервера если всё ОК.
         rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
     
