@@ -248,7 +248,8 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
         if idx >= entries:
             break
 
-        entry = board_array[idx]
+        entry = dict(board_array[idx])
+        entry['index'] = idx
         tmplist.append(entry)
 
     return (True, json.dumps({'status':1,'error':'','entries':tmplist,'amount':len(tmplist),'total':entries}))
