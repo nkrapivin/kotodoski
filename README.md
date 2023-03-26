@@ -508,8 +508,8 @@ leaderboard_id=daily&score=228&user_name=SuperNagibator&user_id=71337&vksteam_ti
 {
     "status": 1,
     "error": "",
-    "timestamp": 0,
-    "ip": ""
+    "timestamp": 1679816858.012961,
+    "ip": "5.123.123.200"
 }
 ```
 
