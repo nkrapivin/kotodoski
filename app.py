@@ -40,7 +40,7 @@ def get_next_reset_date(reset_type: str) -> float:
         # недели очень странный предмет, здесь нужно из текущей даты
         # вычесть сколько дней в текущей неделе, и добавить +1 неделю к этой дате.
         # то есть мы откатываем текущую дату в начало недели, и добавляем неделю.
-        return ((dtnow - timedelta(days=dtnow.weekday())) + timedelta(weeks=1)).timestamp()
+        return ((datetime(dtnow.year, dtnow.month, dtnow.day, tzinfo=dtnow.tzinfo, fold=dtnow.fold) - timedelta(days=dtnow.weekday())) + timedelta(weeks=1)).timestamp()
     elif reset_type == 'hour':
         # следующий час, без учёта минут или секунд
         return (datetime(dtnow.year, dtnow.month, dtnow.day, dtnow.hour, tzinfo=dtnow.tzinfo, fold=dtnow.fold) + timedelta(hours=1)).timestamp()
