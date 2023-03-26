@@ -15,12 +15,15 @@ import requests
 from threading import Lock
 import json
 
+from deta import Deta
+
 
 app = Flask(__name__)
-lock = Lock()
-data: dict = None
-data_serialized = ''
 
+deta = Deta()
+
+db_leaderboards = deta.Base('db_leaderboards')
+data = None
 
 def get_current_datetime() -> float:
     return datetime.now(timezone.utc).timestamp()
@@ -53,73 +56,35 @@ def get_next_reset_date(reset_type: str) -> float:
     return 0
 
 
-def backup_data():
-    global data_serialized
-    data_serialized = json.dumps(data)
-
-    if not CONFIG_BACKUP_PATH:
-        return
-    
-    try:
-        os.makedirs(name=CONFIG_BACKUP_PATH, exist_ok=True)
-        txt_path = os.path.join(CONFIG_BACKUP_PATH, 'leaderboards.json')
-        with open(txt_path, 'w') as txt:
-            txt.write(data_serialized)
-        app.logger.info('Backed up leaderboards info to ' + txt_path)
-    except:
-        app.logger.info('Failed to back up leaderboards :(')
-
-
-def load_backup_data_if_present():
-    global data
-    global data_serialized
-
-    if not CONFIG_BACKUP_PATH:
-        return False
-
-    try:
-        txt_path = os.path.join(CONFIG_BACKUP_PATH, 'leaderboards.json')
-        with open(txt_path, 'r') as txt:
-            data = json.load(txt)
-        data_serialized = json.dumps(data)
-        return True
-    except:
-        return False
-
-
 def init_if_not_already():
     global data
-    global data_serialized
-
-    if data is not None:
-        # уже...
-        return
     
-    if load_backup_data_if_present():
-        return
+    do_commit = False
+    data = db_leaderboards.get('data')
 
-    data = {}
-
-    for key, value in CONFIG_LEADERBOARD_INFO.items():
-        data[key] = {
-            'reset_every': value['reset_every'],
-            'reset_date': get_next_reset_date(value['reset_every']),
-            'sort_in_reverse': value['reverse_sort'],
-            'allow_overwrite': value['allow_overwrite'],
-            'max_entries': value['max_entries'],
-            'array': []
-        }
-        app.logger.info('Adding leaderboard with id of ' + key + ' to the party...')
+    if data is None:
+        for key, value in CONFIG_LEADERBOARD_INFO.items():
+            data[key] = {
+                'reset_every': value['reset_every'],
+                'reset_date': get_next_reset_date(value['reset_every']),
+                'sort_in_reverse': value['reverse_sort'],
+                'allow_overwrite': value['allow_overwrite'],
+                'max_entries': value['max_entries'],
+                'array': []
+            }
+            app.logger.info('Adding leaderboard with id of ' + key + ' to the party...')
+            do_commit = True
     
-    data_serialized = json.dumps(data)
+    if do_commit:
+        db_leaderboards.insert(data, 'data')
+    
     app.logger.info('Initialized the leaderboard data')
 
 
 def reset_leaderboards_if_necessary():
-    global data
-
     dtnow = get_current_datetime()
 
+    do_reset = False
     for key in data:
         dtreset = data[key]['reset_date']
         if not dtreset:
@@ -130,6 +95,11 @@ def reset_leaderboards_if_necessary():
             data[key]['array'].clear()
             data[key]['reset_date'] = get_next_reset_date(data[key]['reset_every'])
             app.logger.info('!!! Resetted ' + key)
+            do_reset = True
+    
+    if do_reset:
+        app.logger.info('!!! Comitting changes to the db')
+        db_leaderboards.insert(data, 'data')
 
 
 def pre_request():
@@ -142,7 +112,6 @@ def entry_sort_function(item) -> int:
 
 
 def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, metadata: str, score: int) -> tuple[bool, str]:
-    global data
     pre_request()
 
     # нет смысла иметь отрицательные или нулевые очки в таблице рекордов...
@@ -207,7 +176,7 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
         # такого надеюсь не будет
         app.logger.error('!!! FATAL ERROR in leaderboard data for ', leaderboard_id, ' please inspect!')
         return (False, json.dumps({'status':-6,'error':'unable to find new entry index after sorting, WTF?!'}))
-    backup_data()
+    db_leaderboards.insert(data, 'data')
     # йиппи!!!!1
     return (True, json.dumps({'status':1,'error':'','new_entry_index':our_index}))
 
@@ -271,8 +240,7 @@ def get_client_ip():
     return request.environ.get('HTTP_X_FORWARDED_FOR', request.remote_addr)
 
 
-gas_session_cache = {}
-gas_lock = Lock()
+gas_session_cache = deta.Base('gas_session_cache')
 
 
 def do_gas_sign_sort_function(item) -> str:
@@ -300,103 +268,92 @@ def do_gas_sign(contents: dict[str, str], secret: str) -> str:
 def do_gas_request(gas_uid: str, gas_hash: str, gas_ip: str) -> tuple[bool, str]:
     # -> bool - True / str это имя пользователя, False / это json с ошибкой.
 
-    with gas_lock:
-        if not gas_uid:
-            return (False, json.dumps({'status':-10,'error':'param gas_uid is invalid'}))
-        
-        if not gas_hash:
-            return (False, json.dumps({'status':-11,'error':'param gas_hash is invalid'}))
-        
-        if not gas_ip:
-            return (False, json.dumps({'status':-12,'error':'param gas_ip is invalid'}))
-        
-        gas_gmr_id = str(CONFIG_GAS_GMR_ID)
-        if not gas_gmr_id:
-            return (False, json.dumps({'status':-13,'error':'param gas_gmr_id is invalid'}))
-        
-        gas_secret = CONFIG_GAS_SECRET
-        if not gas_secret:
-            return (False, json.dumps({'status':-14,'error':'param gas_secret is invalid'}))
-        
-        # чистим кэш если он забит
-        if len(gas_session_cache) > CONFIG_GAS_MAX_CACHE_ENTRIES:
-            app.logger.info('Clearing GAS session cache...')
-            gas_session_cache.clear()
-            app.logger.info('GAS session cache has been emptied')
-        
-        # если мы уже авторизованы то получаем имя пользователя
-        cache_key = gas_gmr_id + gas_secret + gas_uid + gas_hash + gas_ip
-        if cache_key in gas_session_cache:
-            # нашли в кэше
-            return (True, gas_session_cache[cache_key])
-        
-        gas_sign = do_gas_sign({
-            'uid': gas_uid,
-            'hash': gas_hash,
-            'ip': gas_ip,
-            'appid': gas_gmr_id
-        }, gas_secret)
-        if not gas_sign:
-            return (False, json.dumps({'status':-15,'error':'failed to calculate gas_sign'}))
-        
-        gas_url = f'https://vkplay.ru/app/{gas_gmr_id}/gas?uid={gas_uid}&hash={gas_hash}&ip={gas_ip}&sign={gas_sign}'
+    if not gas_uid:
+        return (False, json.dumps({'status':-10,'error':'param gas_uid is invalid'}))
+    
+    if not gas_hash:
+        return (False, json.dumps({'status':-11,'error':'param gas_hash is invalid'}))
+    
+    if not gas_ip:
+        return (False, json.dumps({'status':-12,'error':'param gas_ip is invalid'}))
+    
+    gas_gmr_id = str(CONFIG_GAS_GMR_ID)
+    if not gas_gmr_id:
+        return (False, json.dumps({'status':-13,'error':'param gas_gmr_id is invalid'}))
+    
+    gas_secret = CONFIG_GAS_SECRET
+    if not gas_secret:
+        return (False, json.dumps({'status':-14,'error':'param gas_secret is invalid'}))
+    
+    # если мы уже авторизованы то получаем имя пользователя
+    cache_key = gas_gmr_id + gas_secret + gas_uid + gas_hash + gas_ip
+    cache_val = gas_session_cache.get(cache_key)
+    if cache_val is not None:
+        # нашли в кэше
+        return (True, cache_val)
+    
+    gas_sign = do_gas_sign({
+        'uid': gas_uid,
+        'hash': gas_hash,
+        'ip': gas_ip,
+        'appid': gas_gmr_id
+    }, gas_secret)
+    if not gas_sign:
+        return (False, json.dumps({'status':-15,'error':'failed to calculate gas_sign'}))
+    
+    gas_url = f'https://vkplay.ru/app/{gas_gmr_id}/gas?uid={gas_uid}&hash={gas_hash}&ip={gas_ip}&sign={gas_sign}'
 
-        try:
-            ok = requests.get(gas_url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
-            if ok.status_code >= 400:
-                return (False, json.dumps({'status':-16,'error':'gas api request forbidden'}))
-            ok_json = ok.json()
-            ok_json_status = ok_json['status']
-            if ok_json_status != 'ok':
-                return (False, json.dumps({'status':-17,'error':'gas api status failed'}))
-            
-            # TODO: пихать что-то полезнее чем 'ok'?
-            gas_session_cache[cache_key] = ok_json_status
-            return (True, cache_key)
-        except:
-            return (False, json.dumps({'status':-18,'error':'gas api request failed'}))
+    try:
+        ok = requests.get(gas_url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
+        if ok.status_code >= 400:
+            return (False, json.dumps({'status':-16,'error':'gas api request forbidden'}))
+        ok_json = ok.json()
+        ok_json_status = ok_json['status']
+        if ok_json_status != 'ok':
+            return (False, json.dumps({'status':-17,'error':'gas api status failed'}))
+        
+        # TODO: пихать что-то полезнее чем 'ok'?
+        gas_session_cache.insert(ok_json_status, cache_key, expire_in=86400)
+        return (True, cache_key)
+    except:
+        return (False, json.dumps({'status':-18,'error':'gas api request failed'}))
 
 
-vksteam_ticket_cache = {}
-vksteam_lock = Lock()
+vksteam_ticket_cache = deta.Base('vksteam_ticket_cache')
 
 
 def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
-    with vksteam_lock:
-        if not user_id:
-            return (False, json.dumps({'status':-20,'error':'param user_id is invalid'}))
-        
-        if not ticket:
-            return (False, json.dumps({'status':-21,'error':'param vksteam_ticket is invalid'}))
-        
-        if len(vksteam_ticket_cache) > CONFIG_VKSTEAM_MAX_CACHE_ENTRIES:
-            app.logger.info('Clearing VKSteam ticket cache...')
-            vksteam_ticket_cache.clear()
-            app.logger.info('VKSteam ticket cache cleared')
+    if not user_id:
+        return (False, json.dumps({'status':-20,'error':'param user_id is invalid'}))
+    
+    if not ticket:
+        return (False, json.dumps({'status':-21,'error':'param vksteam_ticket is invalid'}))
 
-        if ticket in vksteam_ticket_cache:
-            return (True, vksteam_ticket_cache[ticket])
+    cache_key = user_id + ticket
+    cache_value = vksteam_ticket_cache.get(cache_key)
+    if cache_value is not None:
+        return (True, cache_value)
 
-        url = f'https://api.vkplay.ru/steam/ISteamUserAuth/AuthenticateUserTicket/v1/?key={CONFIG_VKSTEAM_KEY}&ticket={ticket}&appid={CONFIG_VKSTEAM_APP_ID}'
+    url = f'https://api.vkplay.ru/steam/ISteamUserAuth/AuthenticateUserTicket/v1/?key={CONFIG_VKSTEAM_KEY}&ticket={ticket}&appid={CONFIG_VKSTEAM_APP_ID}'
 
-        try:
-            ok = requests.get(url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
-            if ok.status_code >= 400:
-                return (False, json.dumps({'status':-22,'error':'vksteam api request forbidden'}))
-            ok_json = ok.json()
-            if ok_json['response']['params']['result'] != 'OK':
-                return (False, json.dumps({'status':-23,'error':'vksteam api result is not OK'}))
-            # ЭТО ЧИСЛА А НЕ СТРОКИ, МЫЛО, БЛЯТЬ!
-            steamid = str(ok_json['response']['params']['steamid'])
-            ownersteamid = str(ok_json['response']['params']['ownersteamid'])
-            if steamid != user_id and ownersteamid != user_id:
-                # кто-то подделал тикет? ух ты!
-                return (False, json.dumps({'status':-24,'error':'vksteam api user id mismatch'}))
-            # ticket -> user_id lookup словарик :3
-            vksteam_ticket_cache[ticket] = user_id
-            return (True, user_id)
-        except:
-            return (False, json.dumps({'status':-25,'error':'vksteam api request failed'}))
+    try:
+        ok = requests.get(url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
+        if ok.status_code >= 400:
+            return (False, json.dumps({'status':-22,'error':'vksteam api request forbidden'}))
+        ok_json = ok.json()
+        if ok_json['response']['params']['result'] != 'OK':
+            return (False, json.dumps({'status':-23,'error':'vksteam api result is not OK'}))
+        # ЭТО ЧИСЛА А НЕ СТРОКИ, МЫЛО, БЛЯТЬ!
+        steamid = str(ok_json['response']['params']['steamid'])
+        ownersteamid = str(ok_json['response']['params']['ownersteamid'])
+        if steamid != user_id and ownersteamid != user_id:
+            # кто-то подделал тикет? ух ты!
+            return (False, json.dumps({'status':-24,'error':'vksteam api user id mismatch'}))
+        # ticket -> user_id lookup словарик :3
+        vksteam_ticket_cache.insert(user_id, cache_key, expire_in=86400)
+        return (True, user_id)
+    except:
+        return (False, json.dumps({'status':-25,'error':'vksteam api request failed'}))
 
 
 def do_user_id_validation(is_post: str) -> tuple[bool, Response]:
@@ -436,14 +393,13 @@ def post_leaderboard():
         return user_id_auth[1]
     user_id = user_id_auth[1]
     
-    with lock:
-        rv = impl_post_leaderboard(
-            user_id,
-            user_name,
-            leaderboard_id,
-            metadata,
-            score
-        )
+    rv = impl_post_leaderboard(
+        user_id,
+        user_name,
+        leaderboard_id,
+        metadata,
+        score
+    )
 
     if rv[0]:
         httpstatus = 200
@@ -464,13 +420,12 @@ def get_leaderboard():
         return user_id_auth[1]
     user_id = user_id_auth[1]
 
-    with lock:
-        rv = impl_get_leaderboard(
-            user_id,
-            leaderboard_id,
-            index_start,
-            amount
-        )
+    rv = impl_get_leaderboard(
+        user_id,
+        leaderboard_id,
+        index_start,
+        amount
+    )
 
     if rv[0]:
         httpstatus = 200
@@ -480,51 +435,7 @@ def get_leaderboard():
     return Response(response=rv[1], status=httpstatus, content_type='application/json; charset=utf-8')
 
 
-cloud_save_storage: dict = None
-cloud_save_lock = Lock()
-cloud_save_serialized = ''
-
-
-def backup_cloud_save():
-    global cloud_save_serialized
-    
-    cloud_save_serialized = json.dumps(cloud_save_storage)
-    if not CONFIG_BACKUP_PATH:
-        return
-
-    try:
-        os.makedirs(name=CONFIG_BACKUP_PATH, exist_ok=True)
-        txt_path = os.path.join(CONFIG_BACKUP_PATH, 'cloud_save.json')
-        with open(txt_path, 'w') as txt:
-            txt.write(cloud_save_serialized)
-        app.logger.info('Backed up cloud save info to ' + txt_path)
-    except:
-        app.logger.info('Failed to back up :(')
-
-
-def read_cloud_save():
-    global cloud_save_storage
-    global cloud_save_serialized
-
-    cloud_save_storage = {}
-    cloud_save_serialized = json.dumps(cloud_save_storage)
-
-    if not CONFIG_BACKUP_PATH:
-        return
-
-    try:
-        txt_path = os.path.join(CONFIG_BACKUP_PATH, 'cloud_save.json')
-        with open(txt_path) as txt:
-            cloud_save_storage = json.load(txt)
-        cloud_save_serialized = json.dumps(cloud_save_storage)
-        app.logger.info('Parsed txt ok')
-    except:
-        app.logger.info('Failed to read the txt :(')
-
-
-def pre_cloud_save_request():
-    if cloud_save_storage is None:
-        read_cloud_save()
+cloud_save_storage = deta.Base('cloud_saves')
 
 
 @app.route('/v1/api/cloud_post', methods=['POST'])
@@ -539,26 +450,22 @@ def post_cloud_save():
     
     rv = ''
     httpstatus = 200
-    with cloud_save_lock:
-        pre_cloud_save_request()
-
-        if not slot_id:
+    if not user_id:
+        httpstatus = 400
+        rv = json.dumps({'status':-1,'error':'param user_id is invalid'})
+    elif not slot_id:
+        httpstatus = 400
+        rv = json.dumps({'status':-2,'error':'param slot_id is invalid'})
+    else:
+        if not data_string:
             dtnow = 0
-            rv = json.dumps({'status':-1,'error':'param slot_id is invalid','timestamp':dtnow})
+            cloud_save_storage.delete(user_id + '_' + slot_id)
         else:
-            if not data_string:
-                dtnow = 0
-                if (user_id in cloud_save_storage) and (slot_id in cloud_save_storage[user_id]):
-                    cloud_save_storage[user_id].pop(slot_id)
-                    if len(cloud_save_storage[user_id]) <= 0:
-                        cloud_save_storage.pop(user_id)
-            else:
-                dtnow = get_current_datetime()
-                if not (user_id in cloud_save_storage):
-                    cloud_save_storage[user_id] = {}
-                cloud_save_storage[user_id][slot_id] = { 'data': data_string, 'timestamp': dtnow }
-            rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
-            backup_cloud_save()
+            dtnow = get_current_datetime()
+            data_to_put = { 'data': data_string, 'timestamp': dtnow }
+            cloud_save_storage.insert(data_to_put, user_id + '_' + slot_id)
+        # 0 если сейв был удалён, или временная метка сервера если всё ОК.
+        rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
     
     return Response(response=rv, status=httpstatus, content_type='application/json; charset=utf-8')
 
@@ -574,15 +481,27 @@ def get_cloud_save():
     
     rv = ''
     httpstatus = 200
-    with cloud_save_lock:
-        pre_cloud_save_request()
-
-        if (not (user_id in cloud_save_storage)) or (not (slot_id in cloud_save_storage[user_id])):
+    if not user_id:
+        httpstatus = 400
+        rv = json.dumps({'status':-1,'error':'param user_id is invalid'})
+    elif not slot_id:
+        httpstatus = 400
+        rv = json.dumps({'status':-2,'error':'param slot_id is invalid'})
+    else:
+        user_data = cloud_save_storage.get(user_id + '_' + slot_id)
+        if (user_data is None):
             httpstatus = 404
-            rv = json.dumps({'status':0,'error':'no data is present for given user_id or slot_id','timestamp':0,'data':''})
+            rv = json.dumps({'status':0,
+                             'error':'no data is present for given user_id or slot_id',
+                             'timestamp':0,
+                             'data':''
+                            })
         else:
-            rv = json.dumps({'status':1,'error':'','timestamp': cloud_save_storage[user_id][slot_id]['timestamp'], \
-                             'data': cloud_save_storage[user_id][slot_id]['data']})
+            rv = json.dumps({'status':1,
+                             'error':'',
+                             'timestamp': user_data['timestamp'],
+                             'data': user_data['data']
+                            })
     
     return Response(response=rv, status=httpstatus, content_type='application/json; charset=utf-8')
 
@@ -605,19 +524,13 @@ def get_admin_action():
     if not req:
         return 'admin: secret is correct, but no action was given'
     elif req == 'reset':
-        with lock:
-            data = None
-            app.logger.info('Admin leaderboards reset!')
         return 'reset: successful'
     elif req == 'reset_cloud':
-        with cloud_save_lock:
-            cloud_save_storage.clear()
-            app.logger.info('Cloud save data reset!!')
         return 'cloud save reset successful'
     elif req == 'get_cloud_save':
-        return cloud_save_serialized
+        return ''
     elif req == 'get_leaderboards':
-        return data_serialized
+        return ''
     else:
         return 'unknown admin api action o_O?'
 
