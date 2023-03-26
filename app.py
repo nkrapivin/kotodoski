@@ -334,7 +334,7 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
     if not ticket:
         return (False, json.dumps({'status':-21,'error':'param vksteam_ticket is invalid'}))
 
-    cache_key = user_id + ticket
+    cache_key = user_id + '_' + ticket
     cache_value = vksteam_ticket_cache.get(cache_key)
     if cache_value is not None:
         return (True, cache_value)
