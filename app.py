@@ -62,6 +62,8 @@ def init_if_not_already(lbid: str):
     do_commit = False
     data = db_leaderboards.get(lbid)
 
+    # app.logger.warn('@@ data lb = ' + str(data))
+
     if data is None:
         if not (lbid in CONFIG_LEADERBOARD_INFO):
             # такой нет в конфиге? ух ты...
@@ -292,10 +294,11 @@ def do_gas_request(gas_uid: str, gas_hash: str, gas_ip: str) -> tuple[bool, str]
     
     # если мы уже авторизованы то получаем имя пользователя
     cache_key = gas_gmr_id + gas_secret + gas_uid + gas_hash + gas_ip
-    cache_val = gas_session_cache.get(cache_key)
-    if cache_val is not None:
+    cache_value = gas_session_cache.get(cache_key)
+    if (cache_value is not None) and (cache_value['key'] == cache_key) and (cache_value['value'] == gas_uid):
         # нашли в кэше
-        return (True, cache_val)
+        gas_session_cache.update(None, cache_key, expire_in=86400)
+        return (True, gas_uid)
     
     gas_sign = do_gas_sign({
         'uid': gas_uid,
@@ -318,7 +321,7 @@ def do_gas_request(gas_uid: str, gas_hash: str, gas_ip: str) -> tuple[bool, str]
             return (False, json.dumps({'status':-17,'error':'gas api status failed'}))
         
         # TODO: пихать что-то полезнее чем 'ok'?
-        gas_session_cache.put(ok_json_status, cache_key, expire_in=86400)
+        gas_session_cache.put(gas_uid, cache_key, expire_in=86400)
         return (True, cache_key)
     except:
         return (False, json.dumps({'status':-18,'error':'gas api request failed'}))
@@ -336,10 +339,10 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
 
     cache_key = user_id + '_' + ticket
     cache_value = vksteam_ticket_cache.get(cache_key)
-    if (cache_value is not None) and (cache_value == user_id):
+    if (cache_value is not None) and (cache_value['key'] == cache_key) and (cache_value['value'] == user_id):
         # продляем жизнь тикета в кэше
         vksteam_ticket_cache.update(None, cache_key, expire_in=86400)
-        return (True, cache_value)
+        return (True, user_id)
 
     url = f'https://api.vkplay.ru/steam/ISteamUserAuth/AuthenticateUserTicket/v1/?key={CONFIG_VKSTEAM_KEY}&ticket={ticket}&appid={CONFIG_VKSTEAM_APP_ID}'
 
@@ -496,6 +499,7 @@ def get_cloud_save():
         rv = json.dumps({'status':-2,'error':'param slot_id is invalid'})
     else:
         user_data = cloud_save_storage.get(user_id + '_' + slot_id)
+        # app.logger.warn('@@ cloud data = ' + str(user_data))
         if (user_data is None):
             httpstatus = 404
             rv = json.dumps({'status':0,
@@ -547,6 +551,14 @@ def get_server_time():
     ip = get_client_ip()
     rv = json.dumps({'status':1,'error':'','timestamp':get_current_datetime(),'ip':ip})
     return Response(response=rv, status=200, content_type='application/json; charset=utf-8')
+
+
+@app.route("/")
+def print_greeting():
+    if not CONFIG_GREETING_MESSAGE:
+        return 'Kotodoski Staging Server'
+    else:
+        return CONFIG_GREETING_MESSAGE
 
 
 def run_app():

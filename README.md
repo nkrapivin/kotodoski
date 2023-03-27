@@ -62,6 +62,7 @@
 |CONFIG_ADMIN_SECRET|str|Секрет для админских API методов доски|
 |CONFIG_LEADERBOARD_INFO|dict[str, dict[str, str\|int\|bool]]|Описание всех досок, об этом ниже|
 |CONFIG_BACKUP_PATH|str\|None|Путь до папки куда писать резервные копии данных, `None` - не делать резервные копии|
+|CONFIG_GREETING_MESSAGE|str|Как приветствовать любопытных, что попытались открыть сервер как ссылку?|
 
 **Пример CONFIG_LEADERBOARD_INFO:**
 
