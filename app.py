@@ -336,7 +336,9 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
 
     cache_key = user_id + '_' + ticket
     cache_value = vksteam_ticket_cache.get(cache_key)
-    if cache_value is not None:
+    if (cache_value is not None) and (cache_value == user_id):
+        # продляем жизнь тикета в кэше
+        vksteam_ticket_cache.put(cache_value, cache_key, expire_in=86400)
         return (True, cache_value)
 
     url = f'https://api.vkplay.ru/steam/ISteamUserAuth/AuthenticateUserTicket/v1/?key={CONFIG_VKSTEAM_KEY}&ticket={ticket}&appid={CONFIG_VKSTEAM_APP_ID}'
