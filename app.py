@@ -25,6 +25,11 @@ deta = Deta()
 db_leaderboards = deta.Base('db_leaderboards')
 data = None
 
+
+def get_json(the_value) -> str:
+    return app.json.dumps(the_value, separators=(',', ':'))
+
+
 def get_current_datetime() -> float:
     return datetime.now(timezone.utc).timestamp()
 
@@ -128,19 +133,19 @@ def entry_sort_function(item) -> int:
 def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, metadata: str, score: int) -> tuple[bool, str]:
     # нет смысла иметь отрицательные или нулевые очки в таблице рекордов...
     if score is None or score <= 0:
-        return (False, json.dumps({'status':-1,'error':'param score is invalid'}))
+        return (False, get_json({'status':-1,'error':'param score is invalid'}))
 
     if not user_id:
-        return (False, json.dumps({'status':-2,'error':'param user_id is invalid'}))
+        return (False, get_json({'status':-2,'error':'param user_id is invalid'}))
     
     if not user_name:
-        return (False, json.dumps({'status':-3,'error':'param user_name is invalid'}))
+        return (False, get_json({'status':-3,'error':'param user_name is invalid'}))
     
     if not leaderboard_id:
-        return (False, json.dumps({'status':-4,'error':'param leaderboard_id is invalid'}))
+        return (False, get_json({'status':-4,'error':'param leaderboard_id is invalid'}))
 
     if not pre_request(leaderboard_id):
-        return (False, json.dumps({'status':-5,'error':'leaderboard with given leaderboard_id does not exist'}))
+        return (False, get_json({'status':-5,'error':'leaderboard with given leaderboard_id does not exist'}))
 
     board_array: list = data['array']
     for idx in range(len(board_array)):
@@ -152,7 +157,7 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
                 break
             else:
                 # если не включена, то возвращаем ошибку
-                return (False, json.dumps({'status':0,'error':'an entry for given user_id already exists'}))
+                return (False, get_json({'status':0,'error':'an entry for given user_id already exists'}))
 
     # добавляем запись о пользователе в конец таблицы
     metadatastr = ''
@@ -187,29 +192,29 @@ def impl_post_leaderboard(user_id: str, user_name: str, leaderboard_id: str, met
     if our_index == -1:
         # такого надеюсь не будет
         app.logger.error('!!! FATAL ERROR in leaderboard data for ', leaderboard_id, ' please inspect!')
-        return (False, json.dumps({'status':-6,'error':'unable to find new entry index after sorting, WTF?!'}))
+        return (False, get_json({'status':-6,'error':'unable to find new entry index after sorting, WTF?!'}))
     db_leaderboards.put(data, leaderboard_id)
     # йиппи!!!!1
-    return (True, json.dumps({'status':1,'error':'','new_entry_index':our_index}))
+    return (True, get_json({'status':1,'error':'','new_entry_index':our_index}))
 
 
 def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, amount: int) -> tuple[bool, str]:
     if not user_id:
-        return (False, json.dumps({'status':-1,'error':'param user_id is invalid'}))
+        return (False, get_json({'status':-1,'error':'param user_id is invalid'}))
 
     if not leaderboard_id:
-        return (False, json.dumps({'status':-2,'error':'param leaderboard_id is invalid'}))
+        return (False, get_json({'status':-2,'error':'param leaderboard_id is invalid'}))
     
     if (index_start is None) or (index_start < -1):
-        return (False, json.dumps({'status':-3,'error':'param index_start is invalid'}))
+        return (False, get_json({'status':-3,'error':'param index_start is invalid'}))
     
     # index_start == -1 значит вывести относительно нашего пользователя
     
     if amount < 0:
-        return (False, json.dumps({'status':-5,'error':'param amount is invalid'}))
+        return (False, get_json({'status':-5,'error':'param amount is invalid'}))
 
     if not pre_request(leaderboard_id):
-        return (False, json.dumps({'status':-4,'error':'leaderboard with given leaderboard_id does not exist'}))
+        return (False, get_json({'status':-4,'error':'leaderboard with given leaderboard_id does not exist'}))
 
     board_array: list = data['array']
     entries = len(board_array)
@@ -224,7 +229,7 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
     
     if index_start == -1:
         # был дан индекс -1 (искать относительно нас), но мы "нас" так и не нашли!
-        return (False, json.dumps({'status':0,'error':'index_start is -1 but player with specified user_id is not present'}))
+        return (False, get_json({'status':0,'error':'index_start is -1 but player with specified user_id is not present'}))
 
     if amount == 0:
         # amount <= 0 значит вывести до конца списка, если возможно.
@@ -240,7 +245,7 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
         entry['index'] = idx
         tmplist.append(entry)
 
-    return (True, json.dumps({'status':1,'error':'','entries':tmplist,'amount':len(tmplist),'total':entries}))
+    return (True, get_json({'status':1,'error':'','entries':tmplist,'amount':len(tmplist),'total':entries}))
 
 
 def get_client_ip():
@@ -276,21 +281,21 @@ def do_gas_request(gas_uid: str, gas_hash: str, gas_ip: str) -> tuple[bool, str]
     # -> bool - True / str это имя пользователя, False / это json с ошибкой.
 
     if not gas_uid:
-        return (False, json.dumps({'status':-10,'error':'param gas_uid is invalid'}))
+        return (False, get_json({'status':-10,'error':'param gas_uid is invalid'}))
     
     if not gas_hash:
-        return (False, json.dumps({'status':-11,'error':'param gas_hash is invalid'}))
+        return (False, get_json({'status':-11,'error':'param gas_hash is invalid'}))
     
     if not gas_ip:
-        return (False, json.dumps({'status':-12,'error':'param gas_ip is invalid'}))
+        return (False, get_json({'status':-12,'error':'param gas_ip is invalid'}))
     
     gas_gmr_id = str(CONFIG_GAS_GMR_ID)
     if not gas_gmr_id:
-        return (False, json.dumps({'status':-13,'error':'param gas_gmr_id is invalid'}))
+        return (False, get_json({'status':-13,'error':'param gas_gmr_id is invalid'}))
     
     gas_secret = CONFIG_GAS_SECRET
     if not gas_secret:
-        return (False, json.dumps({'status':-14,'error':'param gas_secret is invalid'}))
+        return (False, get_json({'status':-14,'error':'param gas_secret is invalid'}))
     
     # если мы уже авторизованы то получаем имя пользователя
     cache_key = gas_gmr_id + gas_secret + gas_uid + gas_hash + gas_ip
@@ -307,24 +312,24 @@ def do_gas_request(gas_uid: str, gas_hash: str, gas_ip: str) -> tuple[bool, str]
         'appid': gas_gmr_id
     }, gas_secret)
     if not gas_sign:
-        return (False, json.dumps({'status':-15,'error':'failed to calculate gas_sign'}))
+        return (False, get_json({'status':-15,'error':'failed to calculate gas_sign'}))
     
     gas_url = f'https://vkplay.ru/app/{gas_gmr_id}/gas?uid={gas_uid}&hash={gas_hash}&ip={gas_ip}&sign={gas_sign}'
 
     try:
         ok = requests.get(gas_url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
         if ok.status_code >= 400:
-            return (False, json.dumps({'status':-16,'error':'gas api request forbidden'}))
+            return (False, get_json({'status':-16,'error':'gas api request forbidden'}))
         ok_json = ok.json()
         ok_json_status = ok_json['status']
         if ok_json_status != 'ok':
-            return (False, json.dumps({'status':-17,'error':'gas api status failed'}))
+            return (False, get_json({'status':-17,'error':'gas api status failed'}))
         
         # TODO: пихать что-то полезнее чем 'ok'?
         gas_session_cache.put(gas_uid, cache_key, expire_in=86400)
         return (True, cache_key)
     except:
-        return (False, json.dumps({'status':-18,'error':'gas api request failed'}))
+        return (False, get_json({'status':-18,'error':'gas api request failed'}))
 
 
 vksteam_ticket_cache = deta.Base('vksteam_ticket_cache')
@@ -332,10 +337,10 @@ vksteam_ticket_cache = deta.Base('vksteam_ticket_cache')
 
 def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
     if not user_id:
-        return (False, json.dumps({'status':-20,'error':'param user_id is invalid'}))
+        return (False, get_json({'status':-20,'error':'param user_id is invalid'}))
     
     if not ticket:
-        return (False, json.dumps({'status':-21,'error':'param vksteam_ticket is invalid'}))
+        return (False, get_json({'status':-21,'error':'param vksteam_ticket is invalid'}))
 
     cache_key = user_id + '_' + ticket
     cache_value = vksteam_ticket_cache.get(cache_key)
@@ -349,21 +354,21 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
     try:
         ok = requests.get(url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
         if ok.status_code >= 400:
-            return (False, json.dumps({'status':-22,'error':'vksteam api request forbidden'}))
+            return (False, get_json({'status':-22,'error':'vksteam api request forbidden'}))
         ok_json = ok.json()
         if ok_json['response']['params']['result'] != 'OK':
-            return (False, json.dumps({'status':-23,'error':'vksteam api result is not OK'}))
+            return (False, get_json({'status':-23,'error':'vksteam api result is not OK'}))
         # ЭТО ЧИСЛА А НЕ СТРОКИ, МЫЛО, БЛЯТЬ!
         steamid = str(ok_json['response']['params']['steamid'])
         ownersteamid = str(ok_json['response']['params']['ownersteamid'])
         if steamid != user_id and ownersteamid != user_id:
             # кто-то подделал тикет? ух ты!
-            return (False, json.dumps({'status':-24,'error':'vksteam api user id mismatch'}))
+            return (False, get_json({'status':-24,'error':'vksteam api user id mismatch'}))
         # ticket -> user_id lookup словарик :3
         vksteam_ticket_cache.put(user_id, cache_key, expire_in=86400)
         return (True, user_id)
     except:
-        return (False, json.dumps({'status':-25,'error':'vksteam api request failed'}))
+        return (False, get_json({'status':-25,'error':'vksteam api request failed'}))
 
 
 def do_user_id_validation(is_post: str) -> tuple[bool, Response]:
@@ -462,10 +467,10 @@ def post_cloud_save():
     httpstatus = 200
     if not user_id:
         httpstatus = 400
-        rv = json.dumps({'status':-1,'error':'param user_id is invalid'})
+        rv = get_json({'status':-1,'error':'param user_id is invalid'})
     elif not slot_id:
         httpstatus = 400
-        rv = json.dumps({'status':-2,'error':'param slot_id is invalid'})
+        rv = get_json({'status':-2,'error':'param slot_id is invalid'})
     else:
         if not data_string:
             dtnow = 0
@@ -475,7 +480,7 @@ def post_cloud_save():
             data_to_put = { 'data': data_string, 'timestamp': dtnow }
             cloud_save_storage.put(data_to_put, user_id + '_' + slot_id)
         # 0 если сейв был удалён, или временная метка сервера если всё ОК.
-        rv = json.dumps({'status':1,'error':'','timestamp':dtnow})
+        rv = get_json({'status':1,'error':'','timestamp':dtnow})
     
     return Response(response=rv, status=httpstatus, content_type='application/json; charset=utf-8')
 
@@ -493,22 +498,22 @@ def get_cloud_save():
     httpstatus = 200
     if not user_id:
         httpstatus = 400
-        rv = json.dumps({'status':-1,'error':'param user_id is invalid'})
+        rv = get_json({'status':-1,'error':'param user_id is invalid'})
     elif not slot_id:
         httpstatus = 400
-        rv = json.dumps({'status':-2,'error':'param slot_id is invalid'})
+        rv = get_json({'status':-2,'error':'param slot_id is invalid'})
     else:
         user_data = cloud_save_storage.get(user_id + '_' + slot_id)
         # app.logger.warn('@@ cloud data = ' + str(user_data))
         if (user_data is None):
             httpstatus = 404
-            rv = json.dumps({'status':0,
+            rv = get_json({'status':0,
                              'error':'no data is present for given user_id or slot_id',
                              'timestamp':0,
                              'data':''
                             })
         else:
-            rv = json.dumps({'status':1,
+            rv = get_json({'status':1,
                              'error':'',
                              'timestamp': user_data['timestamp'],
                              'data': user_data['data']
@@ -549,7 +554,7 @@ def get_admin_action():
 @app.route('/v1/api/server_time', methods=['GET'])
 def get_server_time():
     ip = get_client_ip()
-    rv = json.dumps({'status':1,'error':'','timestamp':get_current_datetime(),'ip':ip})
+    rv = get_json({'status':1,'error':'','timestamp':get_current_datetime(),'ip':ip})
     return Response(response=rv, status=200, content_type='application/json; charset=utf-8')
 
 
