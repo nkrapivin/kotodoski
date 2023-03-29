@@ -204,8 +204,11 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
 
     if not leaderboard_id:
         return (False, get_json({'status':-2,'error':'param leaderboard_id is invalid'}))
-    
-    if (index_start is None) or (index_start < -1):
+
+    if index_start is None:
+        index_start = 0
+        
+    if index_start < -1:
         return (False, get_json({'status':-3,'error':'param index_start is invalid'}))
     
     # index_start == -1 значит вывести относительно нашего пользователя
