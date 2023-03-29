@@ -210,6 +210,9 @@ def impl_get_leaderboard(user_id: str, leaderboard_id: str, index_start: int, am
     
     # index_start == -1 значит вывести относительно нашего пользователя
     
+    if amount is None:
+        amount = 0
+
     if amount < 0:
         return (False, get_json({'status':-5,'error':'param amount is invalid'}))
 
