@@ -364,7 +364,7 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
         ok_json = ok.json()
         if ok_json['response']['params']['result'] != 'OK':
             return (False, get_json({'status':-23,'error':'vksteam api result is not OK'}))
-        # ЭТО ЧИСЛА А НЕ СТРОКИ, МЫЛО, БЛЯТЬ!
+        # ЭТО ЧИСЛА А НЕ СТРОКИ, БЛЯТЬ!
         steamid = str(ok_json['response']['params']['steamid'])
         ownersteamid = str(ok_json['response']['params']['ownersteamid'])
         if steamid != user_id and ownersteamid != user_id:
