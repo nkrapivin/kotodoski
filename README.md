@@ -53,15 +53,12 @@
 |CONFIG_USE_GAS|bool|Использовать ли авторизацию через GAS?|
 |CONFIG_GAS_GMR_ID|int|GMR ID игры, см. в Системных свойствах!|
 |CONFIG_GAS_SECRET|str|GAS секрет игры, см. в Системных свойствах!|
-|CONFIG_GAS_MAX_CACHE_ENTRIES|int|Макс. кол-во кэшированных записей GAS|
 |CONFIG_USE_VKSTEAM|bool|Использовать ли авторизацию через VKSteam?|
 |CONFIG_VKSTEAM_APP_ID|int|ID для эмуляции Steam из Системных свойств!|
 |CONFIG_VKSTEAM_KEY|str|Секрет для эмуляции Steam API из Системных свойств!|
-|CONFIG_VKSTEAM_MAX_CACHE_ENTRIES|int|Макс. кол-во кэшированных тикетов VKSteam|
 |CONFIG_SERVER_USER_AGENT|str|Как представляться серверам ВК?|
 |CONFIG_ADMIN_SECRET|str|Секрет для админских API методов доски|
 |CONFIG_LEADERBOARD_INFO|dict[str, dict[str, str\|int\|bool]]|Описание всех досок, об этом ниже|
-|CONFIG_BACKUP_PATH|str\|None|Путь до папки куда писать резервные копии данных, `None` - не делать резервные копии|
 |CONFIG_GREETING_MESSAGE|str|Как приветствовать любопытных, что попытались открыть сервер как ссылку?|
 
 **Пример CONFIG_LEADERBOARD_INFO:**

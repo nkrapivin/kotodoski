@@ -10,16 +10,12 @@ CONFIG_USE_GAS = False
 CONFIG_GAS_GMR_ID = 0
 # str, GAS секрет из системных свойств??
 CONFIG_GAS_SECRET = ''
-# int, сколько GAS сессий нужно держать в кэше?
-CONFIG_GAS_MAX_CACHE_ENTRIES = 1000
 # bool, использовать VKSteam для авторизации или нет?
 CONFIG_USE_VKSTEAM = True
 # int, Игра -> Системные свойства -> Режим эмуляции Steam -> ID для эмуляции Steam
 CONFIG_VKSTEAM_APP_ID = 2000000
 # str, Игра -> Системные свойства -> Режим эмуляции Steam -> Секрет для эмуляции Steam API
 CONFIG_VKSTEAM_KEY = 'abcdef'
-# int, сколько тикетов нужно держать в кэше?
-CONFIG_VKSTEAM_MAX_CACHE_ENTRIES = 1000
 # str, каким User-Agentом представляться системе GAS или VKSteam?
 CONFIG_SERVER_USER_AGENT = 'AverageGASEnjoyer/1.0 (WeLoveCats; Cat-like)'
 # str, секрет для admin_ методов
