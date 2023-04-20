@@ -10,10 +10,7 @@ from config import *
 from flask import Flask, request, Response
 from datetime import datetime, timezone, timedelta
 import hashlib
-import os
 import requests
-from threading import Lock
-import json
 
 from deta import Deta
 
