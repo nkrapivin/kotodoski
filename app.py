@@ -360,15 +360,18 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
     try:
         ok = requests.get(url, headers={'User-Agent': CONFIG_SERVER_USER_AGENT})
         if ok.status_code >= 400:
+            app.logger.error('@@ api request forbidden ' + str(user_id) + ';' + str(ticket) + ';' + str(ok.status_code) + ';' + str(ok.text))
             return (False, get_json({'status':-22,'error':'vksteam api request forbidden'}))
         ok_json = ok.json()
         if ok_json['response']['params']['result'] != 'OK':
+            app.logger.error('@@ api result is not OK ' + str(user_id) + ';' + str(ticket) + ';' + str(ok.status_code) + ';' + str(ok.text))
             return (False, get_json({'status':-23,'error':'vksteam api result is not OK'}))
         # ЭТО ЧИСЛА А НЕ СТРОКИ, БЛЯТЬ!
         steamid = str(ok_json['response']['params']['steamid'])
         ownersteamid = str(ok_json['response']['params']['ownersteamid'])
         if steamid != user_id and ownersteamid != user_id:
             # кто-то подделал тикет? ух ты!
+            app.logger.error('@@ api ticket forged ' + str(user_id) + ';' + str(ticket) + ';' + str(ok.status_code) + ';' + str(ok.text))
             return (False, get_json({'status':-24,'error':'vksteam api user id mismatch'}))
         # ticket -> user_id lookup словарик :3
         vksteam_ticket_cache.put(user_id, cache_key, expire_in=86400)
