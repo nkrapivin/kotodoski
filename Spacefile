@@ -6,4 +6,4 @@ micros:
     engine: python3.9
     primary: true
     public: true
-    # run: uvicorn main:app
+    run: uvicorn main:app
