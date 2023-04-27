@@ -375,7 +375,7 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
         return (True, user_id)
     except:
         # у vk play сдох сервер?
-        app.logger.error('@@ vksteam is asleep ' + str(user_id) + ';' + str(ticket) + ';' + str(ok.status_code) + ';' + str(ok.text))
+        app.logger.error('@@ vksteam is asleep ' + str(user_id) + ';' + str(ticket) + ';')
         return (False, get_json({'status':-25,'error':'vksteam api request failed'}))
 
 
