@@ -105,10 +105,10 @@ def reset_leaderboards_if_necessary(lbid: str):
         return
 
     if dtnow >= dtreset:
-        app.logger.info('!!! Resetting leaderboard with id of ' + lbid)
+        app.logger.warn('!!! Resetting leaderboard with id of ' + lbid)
         data['array'].clear()
         data['reset_date'] = get_next_reset_date(data['reset_every'])
-        app.logger.info('!!! Resetted ' + lbid)
+        app.logger.warn('!!! Resetted ' + lbid)
         do_reset = True
     
     if do_reset:
@@ -374,6 +374,8 @@ def do_vksteam_verify_ticket(ticket: str, user_id: str) -> tuple[bool, str]:
         vksteam_ticket_cache.put(user_id, cache_key, expire_in=86400)
         return (True, user_id)
     except:
+        # у vk play сдох сервер?
+        app.logger.error('@@ vksteam is asleep ' + str(user_id) + ';' + str(ticket) + ';' + str(ok.status_code) + ';' + str(ok.text))
         return (False, get_json({'status':-25,'error':'vksteam api request failed'}))
 
 
@@ -542,6 +544,7 @@ def get_admin_action():
     if secret is None or secret != CONFIG_ADMIN_SECRET:
         return 'ne-a, izvinite'
     
+    # TODO: починить эти методы наконец.
     req = request.args.get('action', type=str)
     if not req:
         return 'admin: secret is correct, but no action was given'
@@ -559,6 +562,8 @@ def get_admin_action():
 
 @app.route('/v1/api/server_time', methods=['GET'])
 def get_server_time():
+    # этот метод можно использовать без авторизации
+    # для проверки доступности сервера
     ip = get_client_ip()
     rv = get_json({'status':1,'error':'','timestamp':get_current_datetime(),'ip':ip})
     return Response(response=rv, status=200, content_type='application/json; charset=utf-8')
@@ -566,6 +571,8 @@ def get_server_time():
 
 @app.route("/")
 def print_greeting():
+    # что выводить если ваш сервер попытались открыть
+    # как ссылку в браузере?
     if not CONFIG_GREETING_MESSAGE:
         return 'Kotodoski Staging Server'
     else:

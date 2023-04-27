@@ -1,2 +1,6 @@
 .git
 .venv
+.vscode
+README.md
+config_template.py
+__pycache__
